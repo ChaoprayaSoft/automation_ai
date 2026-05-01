@@ -21,58 +21,94 @@ def index():
 
 def scrape_facebook_group(url, count):
     posts = []
+    
+    # MOBILE BYPASS: Switch to m.facebook.com which is easier to scrape
+    if "www.facebook.com" in url:
+        url = url.replace("www.facebook.com", "m.facebook.com")
+    elif "facebook.com" in url and "m.facebook.com" not in url:
+        url = url.replace("facebook.com", "m.facebook.com")
+        
     print(f"--- Starting Scrape Process for: {url} ---")
     try:
         with sync_playwright() as p:
             print("Launching Browser...")
-            # Added flags for headless environments like Render
             browser = p.chromium.launch(
                 headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu'
-                ]
+                args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
             )
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                viewport={'width': 1280, 'height': 800}
-            )
-            page = context.new_page()
-            if stealth and callable(stealth):
-                try:
-                    stealth(page)
-                except Exception as stealth_err:
-                    print(f"Stealth application skipped: {stealth_err}")
-            elif stealth:
-                 # If it's a module, try to call the stealth function inside it
-                 try:
-                     from playwright_stealth import stealth as stealth_module
-                     stealth_module.stealth(page)
-                 except:
-                     pass
             
-            print(f"Navigating to: {url}")
-            # Use a longer timeout and wait for load
+            # Use a mobile-like context
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1",
+                viewport={'width': 390, 'height': 844}
+            )
+            
+            page = context.new_page()
+            
+            # Apply stealth if available
+            if stealth and callable(stealth):
+                try: stealth(page)
+                except: pass
+            
+            print(f"Navigating to Mobile URL: {url}")
             page.goto(url, wait_until="load", timeout=90000)
             
-            print("Initial load complete. Waiting 8s for dynamic content...")
-            page.wait_for_timeout(8000)
+            print("Initial load complete. Waiting for dynamic content...")
+            page.wait_for_timeout(7000)
 
-            # --- SMART LOGIN/BLOCK DETECTION ---
-            current_url = page.url.lower()
-            if "login" in current_url or "checkpoint" in current_url or page.query_selector('input[name="email"]'):
-                print("!! BLOCKED: Hit login wall or checkpoint !!")
+            # Check for login wall on mobile
+            if "login" in page.url or page.query_selector('input[name="email"]') or page.query_selector('#login_form'):
+                print("!! Still blocked on mobile. Login requested. !!")
                 browser.close()
-                return {"error": "login_required", "msg": "Facebook is requesting a login to view this group."}
+                return {"error": "login_required", "msg": "Facebook is still requesting a login. We may need to use session cookies."}
+            
+            scraped_post_ids = set()
+            max_scrolls = 15
+            scroll_count = 0
+            
+            while len(posts) < count and scroll_count < max_scrolls:
+                print(f"Analyzing mobile page (Scroll {scroll_count})...")
+                
+                # Mobile Facebook uses different selectors (usually 'article' or div with specific data-attributes)
+                post_elements = page.query_selector_all('article, div[data-sigil*="story"]')
+                
+                if not post_elements:
+                    # Fallback to general div structures if mobile specific ones fail
+                    post_elements = page.query_selector_all('div[role="article"], div.story_body_container')
 
-            # Check for "Content not found" or "Private Group" text
-            body_text = page.inner_text("body")
-            if "Content not found" in body_text or "Private group" in body_text:
-                print("!! BLOCKED: Content is private or not found !!")
-                browser.close()
-                return {"error": "private_group", "msg": "This group is private or the content is unavailable."}
+                print(f"Found {len(post_elements)} potential elements")
+                
+                for element in post_elements:
+                    if len(posts) >= count: break
+                    
+                    try:
+                        inner_text = element.inner_text()
+                        if not inner_text or len(inner_text) < 20: continue
+                        
+                        text_id = inner_text[:100]
+                        if text_id in scraped_post_ids: continue
+                        scraped_post_ids.add(text_id)
+                        
+                        # Extract text
+                        post_text = inner_text
+                        
+                        # On mobile, the structure is flatter. We'll grab the whole block.
+                        posts.append({
+                            "text": post_text,
+                            "likes": "View on FB",
+                            "comments_count": "Multiple",
+                            "comments": [] # Mobile comments are often hidden behind a click
+                        })
+                        print(f"Scraped mobile post {len(posts)}")
+                    except: continue
+
+                print("Scrolling mobile feed...")
+                page.evaluate("window.scrollBy(0, 1200)")
+                page.wait_for_timeout(4000)
+                scroll_count += 1
+
+            browser.close()
+            return posts
 
             scraped_post_ids = set()
             
