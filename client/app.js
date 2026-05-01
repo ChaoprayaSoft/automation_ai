@@ -49,13 +49,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ url, count })
             });
 
-            if (!response.ok) throw new Error('Scraping failed');
-
             const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Scraping failed');
+            }
+
             currentData = data;
             displayResults(data.posts);
         } catch (error) {
-            alert('Error: ' + error.message);
+            console.error('Scrape Error:', error);
+            alert('Error: ' + error.message + (error.stack ? '\nCheck console for details.' : ''));
+            
+            // Show error in the UI instead of just an alert
+            postsContainer.innerHTML = `
+                <div class="glass" style="padding: 2rem; border-left: 4px solid #ff4b4b; margin-top: 2rem;">
+                    <h3 style="color: #ff4b4b; margin-bottom: 1rem;">Analysis Failed</h3>
+                    <p>${error.message}</p>
+                    <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 1rem;">
+                        This usually happens if Facebook blocks the request or if the group is private.
+                    </p>
+                </div>
+            `;
+            resultsSection.classList.remove('hidden');
         } finally {
             loadingDiv.classList.add('hidden');
         }
