@@ -40,14 +40,36 @@ def scrape_facebook_group(url, count):
                 args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
             )
             
-            # Use a MODERN mobile context with fixed English locale
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
-                viewport={'width': 390, 'height': 844},
-                locale="en-US",
-                timezone_id="UTC"
-            )
+            # Set up the context
+            context_args = {
+                "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+                "viewport": {'width': 390, 'height': 844},
+                "locale": "en-US",
+                "timezone_id": "UTC"
+            }
             
+            context = browser.new_context(**context_args)
+            
+            # --- COOKIE INJECTION ---
+            fb_cookies_raw = os.environ.get('FB_COOKIES')
+            if fb_cookies_raw:
+                print("Injecting session cookies from environment...")
+                try:
+                    cookie_list = []
+                    for pair in fb_cookies_raw.split(';'):
+                        if '=' in pair:
+                            name, value = pair.strip().split('=', 1)
+                            cookie_list.append({
+                                "name": name,
+                                "value": value,
+                                "domain": ".facebook.com",
+                                "path": "/"
+                            })
+                    context.add_cookies(cookie_list)
+                    print(f"Successfully injected {len(cookie_list)} cookies.")
+                except Exception as ce:
+                    print(f"Error injecting cookies: {ce}")
+
             page = context.new_page()
             
             # Apply stealth if available
