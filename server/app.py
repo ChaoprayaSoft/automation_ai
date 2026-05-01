@@ -51,11 +51,25 @@ def scrape_facebook_group(url, count):
                 except: pass
             
             print(f"Navigating to Mobile URL: {url}")
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            page.goto(url, wait_until="load", timeout=90000)
             
-            print("Page loaded. Waiting 3s for content...")
-            page.wait_for_timeout(3000)
-
+            print("Page loaded. Checking for redirects...")
+            page.wait_for_timeout(5000)
+            
+            # --- REDIRECT / WRONG PAGE DETECTION ---
+            final_url = page.url.lower()
+            
+            # If redirected to a login page, search page, or generic feed
+            if "login" in final_url or "checkpoint" in final_url:
+                print(f"!! REDIRECTED to login: {final_url}")
+                browser.close()
+                return {"error": "login_required", "msg": "Facebook redirected to a login page. This group might be private."}
+                
+            if "/groups/discover" in final_url or "/home.php" in final_url:
+                print(f"!! REDIRECTED to generic feed: {final_url}")
+                browser.close()
+                return {"error": "redirected", "msg": "Facebook redirected to a generic feed. Try the 'www' version of the URL or a different group."}
+            
             # Extract Group Name
             group_name = "Facebook Group"
             try:
@@ -66,12 +80,6 @@ def scrape_facebook_group(url, count):
                     print(f"Detected Group Name: {group_name}")
             except: pass
 
-            # Check for login wall
-            if "login" in page.url or page.query_selector('input[name="email"]') or page.query_selector('#login_form'):
-                print("!! Still blocked on mobile. Login requested. !!")
-                browser.close()
-                return {"error": "login_required", "msg": "Facebook is still requesting a login. We may need to use session cookies."}
-            
             scraped_post_ids = set()
             max_scrolls = 10
             scroll_count = 0
@@ -102,33 +110,50 @@ def scrape_facebook_group(url, count):
                     if len(posts) >= count: break
                     
                     try:
-                        # Get the most relevant text container within the post
-                        # Try to avoid headers/footers if possible, but fallback to inner_text
-                        content_elem = element.query_selector('div[data-sigil="story-body"], div._5pbx, div[dir="auto"]')
-                        inner_text = content_elem.inner_text() if content_elem else element.inner_text()
+                        # TARGET the actual message content to avoid UI noise
+                        content_elem = element.query_selector('div[data-sigil="story-body"], div._5pbx, div[dir="auto"], div.story_body_container > div')
                         
-                        if not inner_text or len(inner_text) < 15: continue
+                        if content_elem:
+                            raw_text = content_elem.inner_text().strip()
+                        else:
+                            # Fallback but try to clean up the inner_text
+                            raw_text = element.inner_text().strip()
                         
-                        text_id = inner_text[:100]
+                        if not raw_text or len(raw_text) < 15: continue
+                        
+                        # SKIP Sponsored or Suggested posts
+                        if "Sponsored" in raw_text or "Suggested for you" in raw_text:
+                            continue
+                        
+                        # CLEAN UP: Remove common mobile UI noise
+                        noise_phrases = ["Like · Comment · Share", "Full Story", "More...", "Write a comment...", "·"]
+                        clean_text = raw_text
+                        for phrase in noise_phrases:
+                            clean_text = clean_text.replace(phrase, "")
+                        
+                        clean_text = clean_text.strip()
+                        
+                        # Duplicate check on cleaned text
+                        text_id = clean_text[:80]
                         if text_id in scraped_post_ids: continue
                         scraped_post_ids.add(text_id)
                         
-                        # Extract Likes/Comments
+                        # Extract Likes/Comments (Mobile specific)
                         likes = "0"
                         comms = "0"
                         try:
-                            # Try mobile sigils first
-                            like_elem = element.query_selector('span[data-sigil="like-count"], ._1g53')
-                            if like_elem: likes = like_elem.inner_text()
+                            # Search for counts specifically within the footer of the element
+                            l_elem = element.query_selector('span[data-sigil="like-count"], ._1g53, ._27x3')
+                            if l_elem: likes = l_elem.inner_text().strip()
                             
-                            comm_elem = element.query_selector('span[data-sigil="comments-count"], ._1j-c')
-                            if comm_elem: comms = comm_elem.inner_text()
+                            c_elem = element.query_selector('span[data-sigil="comments-count"], ._1j-c, ._37_1')
+                            if c_elem: comms = c_elem.inner_text().strip()
                         except: pass
                         
                         posts.append({
-                            "text": inner_text,
-                            "likes": likes,
-                            "comments_count": comms,
+                            "text": clean_text,
+                            "likes": likes if likes != "0" else "0",
+                            "comments_count": comms if comms != "0" else "0",
                             "comments": []
                         })
                         print(f"Scraped post {len(posts)}")
