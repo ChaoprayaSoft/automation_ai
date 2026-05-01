@@ -49,7 +49,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ url, count })
             });
 
-            const data = await response.json();
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error('Server response was not JSON:', text);
+                throw new Error('Server timed out or returned an invalid response. Try a smaller number of posts (e.g., 3 or 5).');
+            }
 
             if (!response.ok) {
                 throw new Error(data.error || 'Scraping failed');
@@ -59,15 +66,19 @@ document.addEventListener('DOMContentLoaded', () => {
             displayResults(data.posts);
         } catch (error) {
             console.error('Scrape Error:', error);
-            alert('Error: ' + error.message + (error.stack ? '\nCheck console for details.' : ''));
+            let userMsg = error.message;
+            if (userMsg.includes('Unexpected end of JSON input')) {
+                userMsg = 'Request timed out. Try analyzing fewer posts at a time.';
+            }
             
-            // Show error in the UI instead of just an alert
+            alert('Error: ' + userMsg);
+            
             postsContainer.innerHTML = `
                 <div class="glass" style="padding: 2rem; border-left: 4px solid #ff4b4b; margin-top: 2rem;">
                     <h3 style="color: #ff4b4b; margin-bottom: 1rem;">Analysis Failed</h3>
-                    <p>${error.message}</p>
+                    <p>${userMsg}</p>
                     <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 1rem;">
-                        This usually happens if Facebook blocks the request or if the group is private.
+                        Note: Render.com has a 30-second limit. If you request too many posts, the server might cut the connection.
                     </p>
                 </div>
             `;
