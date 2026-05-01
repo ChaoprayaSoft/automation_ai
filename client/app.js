@@ -19,8 +19,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/api/status');
             if (response.ok) {
+                const data = await response.json();
                 serverStatus.classList.add('status-online');
-                serverStatus.innerHTML = '<span class="dot"></span> Backend Online';
+                serverStatus.innerHTML = `<span class="dot"></span> ${data.mode === 'apify' ? 'Apify Active' : 'Backend Online'}`;
             }
         } catch (e) {
             console.warn('Backend not reachable yet');
@@ -41,52 +42,75 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingDiv.classList.remove('hidden');
         resultsSection.classList.add('hidden');
         postsContainer.innerHTML = '';
+        const loadingText = loadingDiv.querySelector('p');
+        loadingText.innerText = 'Initializing Apify Scraper...';
         
         try {
-            const response = await fetch('/api/scrape-group', {
+            // STEP 1: Start the Scrape
+            const startResponse = await fetch('/api/scrape-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url, count })
             });
 
-            const text = await response.text();
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                console.error('Server response was not JSON:', text);
-                throw new Error('Server timed out or returned an invalid response. Try a smaller number of posts (e.g., 3 or 5).');
+            const startData = await startResponse.json();
+
+            if (!startResponse.ok) {
+                throw new Error(startData.error || 'Failed to start scrape');
             }
 
-            if (!response.ok) {
-                throw new Error(data.error || 'Scraping failed');
-            }
+            const runId = startData.run_id;
+            console.log('Scrape started. Run ID:', runId);
+            loadingText.innerText = 'Scraping in progress... This may take 1-2 minutes.';
 
-            currentData = data;
-            displayResults(data);
+            // STEP 2: Poll for Status
+            pollStatus(runId);
+
         } catch (error) {
-            console.error('Scrape Error:', error);
-            let userMsg = error.message;
-            if (userMsg.includes('Unexpected end of JSON input')) {
-                userMsg = 'Request timed out. Try analyzing fewer posts at a time.';
-            }
-            
-            alert('Error: ' + userMsg);
-            
-            postsContainer.innerHTML = `
-                <div class="glass" style="padding: 2rem; border-left: 4px solid #ff4b4b; margin-top: 2rem;">
-                    <h3 style="color: #ff4b4b; margin-bottom: 1rem;">Analysis Failed</h3>
-                    <p>${userMsg}</p>
-                    <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 1rem;">
-                        Note: Render.com has a 30-second limit. If you request too many posts, the server might cut the connection.
-                    </p>
-                </div>
-            `;
-            resultsSection.classList.remove('hidden');
-        } finally {
-            loadingDiv.classList.add('hidden');
+            handleError(error.message);
         }
     });
+
+    async function pollStatus(runId) {
+        const loadingText = loadingDiv.querySelector('p');
+        
+        try {
+            const response = await fetch(`/api/check-status/${runId}`);
+            const data = await response.json();
+
+            if (data.status === 'finished') {
+                loadingDiv.classList.add('hidden');
+                currentData = data;
+                displayResults(data);
+            } else if (data.status === 'failed' || data.status === 'error') {
+                handleError(data.error || 'Scrape job failed');
+            } else {
+                // Still running, check again in 5 seconds
+                console.log('Still scraping...');
+                setTimeout(() => pollStatus(runId), 5000);
+            }
+        } catch (error) {
+            console.warn('Polling error, retrying...', error);
+            setTimeout(() => pollStatus(runId), 5000);
+        }
+    }
+
+    function handleError(msg) {
+        console.error('Error:', msg);
+        loadingDiv.classList.add('hidden');
+        alert('Error: ' + msg);
+        
+        postsContainer.innerHTML = `
+            <div class="glass" style="padding: 2rem; border-left: 4px solid #ff4b4b; margin-top: 2rem;">
+                <h3 style="color: #ff4b4b; margin-bottom: 1rem;">Analysis Failed</h3>
+                <p>${msg}</p>
+                <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 1rem;">
+                    Ensure your Apify API Token is valid and that you have enough credits.
+                </p>
+            </div>
+        `;
+        resultsSection.classList.remove('hidden');
+    }
 
     demoBtn.addEventListener('click', (e) => {
         e.preventDefault();
