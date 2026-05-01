@@ -50,25 +50,30 @@ def scrape_facebook_group(url, count):
             
             context = browser.new_context(**context_args)
             
-            # --- COOKIE INJECTION ---
-            fb_cookies_raw = os.environ.get('FB_COOKIES')
+            # --- SMART COOKIE INJECTION ---
+            fb_cookies_raw = os.environ.get('FB_COOKIES', '')
             if fb_cookies_raw:
-                print("Injecting session cookies from environment...")
+                if fb_cookies_raw.lower().startswith('cookie:'):
+                    fb_cookies_raw = fb_cookies_raw[7:].strip()
+                
+                print("Injecting session cookies...")
                 try:
                     cookie_list = []
                     for pair in fb_cookies_raw.split(';'):
                         if '=' in pair:
-                            name, value = pair.strip().split('=', 1)
-                            cookie_list.append({
-                                "name": name,
-                                "value": value,
-                                "domain": ".facebook.com",
-                                "path": "/"
-                            })
+                            parts = pair.strip().split('=', 1)
+                            if len(parts) == 2:
+                                name, value = parts
+                                cookie_list.append({
+                                    "name": name,
+                                    "value": value,
+                                    "domain": ".facebook.com",
+                                    "path": "/"
+                                })
                     context.add_cookies(cookie_list)
                     print(f"Successfully injected {len(cookie_list)} cookies.")
                 except Exception as ce:
-                    print(f"Error injecting cookies: {ce}")
+                    print(f"Cookie Injection Warning: {ce}")
 
             page = context.new_page()
             
@@ -87,15 +92,19 @@ def scrape_facebook_group(url, count):
             final_url = page.url.lower()
             
             # If redirected to a login page, search page, or generic feed
-            if "login" in final_url or "checkpoint" in final_url:
-                print(f"!! REDIRECTED to login: {final_url}")
+            if "login" in final_url or "checkpoint" in final_url or "home.php" in final_url:
+                print(f"!! REDIRECTED: {final_url}")
                 browser.close()
-                return {"error": "login_required", "msg": "Facebook redirected to a login page. This group might be private."}
+                error_type = "Login Required" if "login" in final_url else "Security Check"
+                return {
+                    "error": "blocked", 
+                    "msg": f"Facebook redirected to a {error_type} page. (Target: {final_url}). Ensure your FB_COOKIES are valid and you are logged in on your browser."
+                }
                 
-            if "/groups/discover" in final_url or "/home.php" in final_url:
+            if "/groups/discover" in final_url:
                 print(f"!! REDIRECTED to generic feed: {final_url}")
                 browser.close()
-                return {"error": "redirected", "msg": "Facebook redirected to a generic feed. Try the 'www' version of the URL or a different group."}
+                return {"error": "redirected", "msg": "Facebook redirected to a generic feed. Try a different group URL."}
             
             # Extract Group Name
             group_name = "Facebook Group"
