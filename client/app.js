@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check server status
     async function checkStatus() {
         try {
-            const response = await fetch('http://localhost:5000/api/status');
+            const response = await fetch('/api/status');
             if (response.ok) {
                 serverStatus.classList.add('status-online');
                 serverStatus.innerHTML = '<span class="dot"></span> Backend Online';
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
         postsContainer.innerHTML = '';
         
         try {
-            const response = await fetch('http://localhost:5000/api/scrape-group', {
+            const response = await fetch('/api/scrape-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url, count })
