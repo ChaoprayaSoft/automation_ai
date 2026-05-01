@@ -52,13 +52,14 @@ def scrape_facebook_group(url, count):
                 args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
             )
             
-            # Get User Agent from environment or use default
-            user_agent = os.environ.get('USER_AGENT', "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1")
+            # Default to a TRUSTED Desktop User Agent
+            default_desktop_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            user_agent = os.environ.get('USER_AGENT', default_desktop_ua)
             
             # Set up the context
             context_args = {
                 "user_agent": user_agent,
-                "viewport": {'width': 1280, 'height': 800} if "Windows" in user_agent or "Macintosh" in user_agent else {'width': 390, 'height': 844},
+                "viewport": {'width': 1280, 'height': 800},
                 "locale": "en-US",
                 "timezone_id": "UTC"
             }
@@ -66,25 +67,26 @@ def scrape_facebook_group(url, count):
             context = browser.new_context(**context_args)
             
             # --- SMART COOKIE INJECTION ---
-            fb_cookies_raw = os.environ.get('FB_COOKIES', '')
+            fb_cookies_raw = os.environ.get('FB_COOKIES', '').strip()
             if fb_cookies_raw:
+                # Remove common prefixes/suffixes
                 if fb_cookies_raw.lower().startswith('cookie:'):
                     fb_cookies_raw = fb_cookies_raw[7:].strip()
                 
                 print("Injecting session cookies...")
                 try:
                     cookie_list = []
-                    for pair in fb_cookies_raw.split(';'):
+                    # More robust parsing for complex cookie strings
+                    raw_parts = [p.strip() for p in fb_cookies_raw.split(';') if p.strip()]
+                    for pair in raw_parts:
                         if '=' in pair:
-                            parts = pair.strip().split('=', 1)
-                            if len(parts) == 2:
-                                name, value = parts
-                                cookie_list.append({
-                                    "name": name,
-                                    "value": value,
-                                    "domain": ".facebook.com",
-                                    "path": "/"
-                                })
+                            name, value = pair.split('=', 1)
+                            cookie_list.append({
+                                "name": name.strip(),
+                                "value": value.strip(),
+                                "domain": ".facebook.com",
+                                "path": "/"
+                            })
                     context.add_cookies(cookie_list)
                     print(f"Successfully injected {len(cookie_list)} cookies.")
                 except Exception as ce:
