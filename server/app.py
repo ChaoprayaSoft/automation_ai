@@ -37,10 +37,12 @@ def scrape_facebook_group(url, count):
                 args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
             )
             
-            # Use a mobile-like context
+            # Use a MODERN mobile context with fixed English locale
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1",
-                viewport={'width': 390, 'height': 844}
+                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+                viewport={'width': 390, 'height': 844},
+                locale="en-US",
+                timezone_id="UTC"
             )
             
             page = context.new_page()
