@@ -54,28 +54,50 @@ def scrape_facebook_group(url, count):
                      pass
             
             print(f"Navigating to: {url}")
-            # Use a longer timeout and wait for load instead of networkidle which can hang
-            page.goto(url, wait_until="load", timeout=60000)
+            # Use a longer timeout and wait for load
+            page.goto(url, wait_until="load", timeout=90000)
             
-            print("Initial load complete. Waiting 5s for dynamic content...")
-            page.wait_for_timeout(5000)
+            print("Initial load complete. Waiting 8s for dynamic content...")
+            page.wait_for_timeout(8000)
 
-            # Check if we hit a login wall early
-            if "login" in page.url or page.query_selector('input[name="email"]'):
-                print("!! Hit login wall immediately !!")
+            # --- SMART LOGIN/BLOCK DETECTION ---
+            current_url = page.url.lower()
+            if "login" in current_url or "checkpoint" in current_url or page.query_selector('input[name="email"]'):
+                print("!! BLOCKED: Hit login wall or checkpoint !!")
                 browser.close()
-                return []
+                return {"error": "login_required", "msg": "Facebook is requesting a login to view this group."}
+
+            # Check for "Content not found" or "Private Group" text
+            body_text = page.inner_text("body")
+            if "Content not found" in body_text or "Private group" in body_text:
+                print("!! BLOCKED: Content is private or not found !!")
+                browser.close()
+                return {"error": "private_group", "msg": "This group is private or the content is unavailable."}
 
             scraped_post_ids = set()
             
-            # Limit the number of scroll attempts to prevent infinite loops
-            max_scrolls = 10
+            # Limit the number of scroll attempts
+            max_scrolls = 12
             scroll_count = 0
             
             while len(posts) < count and scroll_count < max_scrolls:
                 print(f"Analyzing page (Scroll {scroll_count})...")
-                post_elements = page.query_selector_all('div[role="article"]')
-                print(f"Found {len(post_elements)} potential post elements")
+                
+                # Try multiple selectors for Facebook posts
+                post_elements = []
+                selectors = [
+                    'div[role="article"]',
+                    'div[data-testid="fbfeed_story"]',
+                    'div[class*="x1y1aw1k"]', # Common FB container class
+                    'div.x1lliihq' # Another common container
+                ]
+                
+                for selector in selectors:
+                    found = page.query_selector_all(selector)
+                    if len(found) > 0:
+                        print(f"Found {len(found)} elements with selector: {selector}")
+                        post_elements = found
+                        break
                 
                 for element in post_elements:
                     if len(posts) >= count:
@@ -167,8 +189,13 @@ def scrape_group():
     
     print(f"Request received for URL: {url}")
     try:
-        posts = scrape_facebook_group(url, count)
-        return jsonify({"posts": posts})
+        result = scrape_facebook_group(url, count)
+        
+        # Check if the result is an error dict instead of a list of posts
+        if isinstance(result, dict) and "error" in result:
+            return jsonify({"error": result["msg"]}), 403
+            
+        return jsonify({"posts": result})
     except Exception as e:
         import traceback
         error_msg = f"Backend Error: {str(e)}\n{traceback.format_exc()}"
