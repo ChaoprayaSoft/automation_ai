@@ -1,5 +1,6 @@
 flask
 flask-cors
+gunicorn
+apify-client
 playwright
 playwright-stealth
-gunicorn
