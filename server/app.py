@@ -51,10 +51,10 @@ def scrape_facebook_group(url, count):
                 except: pass
             
             print(f"Navigating to Mobile URL: {url}")
-            page.goto(url, wait_until="load", timeout=90000)
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
             
-            print("Initial load complete. Waiting for dynamic content...")
-            page.wait_for_timeout(7000)
+            print("Page loaded. Waiting 3s for content...")
+            page.wait_for_timeout(3000)
 
             # Check for login wall on mobile
             if "login" in page.url or page.query_selector('input[name="email"]') or page.query_selector('#login_form'):
@@ -63,20 +63,14 @@ def scrape_facebook_group(url, count):
                 return {"error": "login_required", "msg": "Facebook is still requesting a login. We may need to use session cookies."}
             
             scraped_post_ids = set()
-            max_scrolls = 15
+            max_scrolls = 10 # Reduced for speed
             scroll_count = 0
             
             while len(posts) < count and scroll_count < max_scrolls:
                 print(f"Analyzing mobile page (Scroll {scroll_count})...")
                 
-                # Mobile Facebook uses different selectors (usually 'article' or div with specific data-attributes)
-                post_elements = page.query_selector_all('article, div[data-sigil*="story"]')
-                
-                if not post_elements:
-                    # Fallback to general div structures if mobile specific ones fail
-                    post_elements = page.query_selector_all('div[role="article"], div.story_body_container')
-
-                print(f"Found {len(post_elements)} potential elements")
+                # Mobile Facebook selectors
+                post_elements = page.query_selector_all('article, div[data-sigil*="story"], div.story_body_container')
                 
                 for element in post_elements:
                     if len(posts) >= count: break
@@ -89,24 +83,24 @@ def scrape_facebook_group(url, count):
                         if text_id in scraped_post_ids: continue
                         scraped_post_ids.add(text_id)
                         
-                        # Extract text
-                        post_text = inner_text
-                        
-                        # On mobile, the structure is flatter. We'll grab the whole block.
                         posts.append({
-                            "text": post_text,
+                            "text": inner_text,
                             "likes": "View on FB",
                             "comments_count": "Multiple",
-                            "comments": [] # Mobile comments are often hidden behind a click
+                            "comments": []
                         })
                         print(f"Scraped mobile post {len(posts)}")
                     except: continue
 
+                if len(posts) >= count:
+                    break
+
                 print("Scrolling mobile feed...")
-                page.evaluate("window.scrollBy(0, 1200)")
-                page.wait_for_timeout(4000)
+                page.evaluate("window.scrollBy(0, 1000)")
+                page.wait_for_timeout(1500) # Faster scroll wait
                 scroll_count += 1
 
+            print(f"Scraping complete: {len(posts)} posts found.")
             browser.close()
             return posts
 
