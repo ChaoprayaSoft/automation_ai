@@ -1,7 +1,13 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth
+try:
+    from playwright_stealth import stealth_sync as stealth
+except (ImportError, AttributeError):
+    try:
+        from playwright_stealth import stealth
+    except:
+        stealth = None
 import time
 import random
 import os
@@ -34,7 +40,18 @@ def scrape_facebook_group(url, count):
                 viewport={'width': 1280, 'height': 800}
             )
             page = context.new_page()
-            stealth(page)
+            if stealth and callable(stealth):
+                try:
+                    stealth(page)
+                except Exception as stealth_err:
+                    print(f"Stealth application skipped: {stealth_err}")
+            elif stealth:
+                 # If it's a module, try to call the stealth function inside it
+                 try:
+                     from playwright_stealth import stealth as stealth_module
+                     stealth_module.stealth(page)
+                 except:
+                     pass
             
             print(f"Navigating to: {url}")
             # Use a longer timeout and wait for load instead of networkidle which can hang
