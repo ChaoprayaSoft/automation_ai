@@ -22,11 +22,14 @@ def index():
 def scrape_facebook_group(url, count):
     posts = []
     
-    # MOBILE BYPASS: Switch to m.facebook.com which is easier to scrape
+    # ULTIMATE BYPASS: Switch to mbasic.facebook.com (Basic Mobile)
+    # This version is the most resistant to bot detection and "unsupported" errors.
     if "www.facebook.com" in url:
-        url = url.replace("www.facebook.com", "m.facebook.com")
-    elif "facebook.com" in url and "m.facebook.com" not in url:
-        url = url.replace("facebook.com", "m.facebook.com")
+        url = url.replace("www.facebook.com", "mbasic.facebook.com")
+    elif "facebook.com" in url and "mbasic.facebook.com" not in url:
+        url = url.replace("facebook.com", "mbasic.facebook.com")
+    elif "m.facebook.com" in url:
+        url = url.replace("m.facebook.com", "mbasic.facebook.com")
         
     print(f"--- Starting Scrape Process for: {url} ---")
     try:
@@ -89,15 +92,13 @@ def scrape_facebook_group(url, count):
             while len(posts) < count and scroll_count < max_scrolls:
                 print(f"Analyzing page (Scroll {scroll_count})...")
                 
-                # Hybrid selectors for both Mobile and Desktop layouts
+                # mbasic Facebook selectors are much simpler
                 selectors = [
                     'article', 
-                    'div[role="article"]', 
-                    'div[data-sigil*="story"]', 
-                    'div._55wo', # Mobile container
-                    'div.story_body_container',
-                    'div._4g33._5pxa', # Mobile post block
-                    'div[data-testid="fbfeed_story"]'
+                    'div[role="article"]',
+                    'div._55wo', # mbasic post container
+                    'table[role="presentation"]', # Some mbasic posts are in tables
+                    'div.story_body_container'
                 ]
                 
                 post_elements = []
@@ -112,53 +113,53 @@ def scrape_facebook_group(url, count):
                     if len(posts) >= count: break
                     
                     try:
-                        # TARGET the actual message content to avoid UI noise
-                        content_elem = element.query_selector('div[data-sigil="story-body"], div._5pbx, div[dir="auto"], div.story_body_container > div')
+                        # On mbasic, the text is usually in a p or a div
+                        # Target specific message areas first
+                        content_elem = element.query_selector('div._5pbx, div[dir="auto"], p, div.msg')
+                        raw_text = content_elem.inner_text().strip() if content_elem else element.inner_text().strip()
                         
-                        if content_elem:
-                            raw_text = content_elem.inner_text().strip()
-                        else:
-                            # Fallback but try to clean up the inner_text
-                            raw_text = element.inner_text().strip()
-                        
-                        if not raw_text or len(raw_text) < 15: continue
+                        if not raw_text or len(raw_text) < 10: continue
                         
                         # SKIP Sponsored or Suggested posts
                         if "Sponsored" in raw_text or "Suggested for you" in raw_text:
                             continue
                         
-                        # CLEAN UP: Remove common mobile UI noise
-                        noise_phrases = ["Like · Comment · Share", "Full Story", "More...", "Write a comment...", "·"]
+                        # CLEAN UP: Remove common mbasic UI noise
+                        noise_phrases = ["Like · Comment · Share", "Full Story", "More...", "Write a comment...", "·", "React"]
                         clean_text = raw_text
                         for phrase in noise_phrases:
                             clean_text = clean_text.replace(phrase, "")
                         
                         clean_text = clean_text.strip()
                         
-                        # Duplicate check on cleaned text
+                        # Duplicate check
                         text_id = clean_text[:80]
                         if text_id in scraped_post_ids: continue
                         scraped_post_ids.add(text_id)
                         
-                        # Extract Likes/Comments (Mobile specific)
+                        # mbasic likes and comments extraction
                         likes = "0"
                         comms = "0"
                         try:
-                            # Search for counts specifically within the footer of the element
-                            l_elem = element.query_selector('span[data-sigil="like-count"], ._1g53, ._27x3')
-                            if l_elem: likes = l_elem.inner_text().strip()
+                            # mbasic uses simple links for these
+                            stats_text = element.inner_text()
+                            if "Like" in stats_text:
+                                import re
+                                like_match = re.search(r'Like\s+(\d+)', stats_text)
+                                if like_match: likes = like_match.group(1)
                             
-                            c_elem = element.query_selector('span[data-sigil="comments-count"], ._1j-c, ._37_1')
-                            if c_elem: comms = c_elem.inner_text().strip()
+                            if "Comment" in stats_text:
+                                comm_match = re.search(r'(\d+)\s+Comment', stats_text)
+                                if comm_match: comms = comm_match.group(1)
                         except: pass
                         
                         posts.append({
                             "text": clean_text,
-                            "likes": likes if likes != "0" else "0",
-                            "comments_count": comms if comms != "0" else "0",
+                            "likes": likes,
+                            "comments_count": comms,
                             "comments": []
                         })
-                        print(f"Scraped post {len(posts)}")
+                        print(f"Scraped mbasic post {len(posts)}")
                     except: continue
 
                 if len(posts) >= count: break
