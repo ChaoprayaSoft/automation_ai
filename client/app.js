@@ -128,8 +128,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
-        if (!posts || posts.length === 0) {
-            postsContainer.innerHTML = headerHtml + '<p class="status-badge">No posts found in this group.</p>';
+        if (!posts || !Array.isArray(posts) || posts.length === 0) {
+            postsContainer.innerHTML = headerHtml + '<p class="status-badge">No posts found or results were invalid.</p>';
             return;
         }
 
