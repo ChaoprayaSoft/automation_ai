@@ -22,14 +22,26 @@ def index():
 def scrape_facebook_group(url, count):
     posts = []
     
-    # ULTIMATE BYPASS: Switch to mbasic.facebook.com (Basic Mobile)
-    # This version is the most resistant to bot detection and "unsupported" errors.
-    if "www.facebook.com" in url:
-        url = url.replace("www.facebook.com", "mbasic.facebook.com")
-    elif "facebook.com" in url and "mbasic.facebook.com" not in url:
-        url = url.replace("facebook.com", "mbasic.facebook.com")
-    elif "m.facebook.com" in url:
-        url = url.replace("m.facebook.com", "mbasic.facebook.com")
+    # SMART BYPASS:
+    # If we have cookies, use the standard Desktop version (more stable for logged-in sessions)
+    # If we DON'T have cookies, use mbasic (most resistant to blocks)
+    has_cookies = bool(os.environ.get('FB_COOKIES'))
+    
+    if not has_cookies:
+        if "www.facebook.com" in url:
+            url = url.replace("www.facebook.com", "mbasic.facebook.com")
+        elif "facebook.com" in url and "mbasic.facebook.com" not in url:
+            url = url.replace("facebook.com", "mbasic.facebook.com")
+        elif "m.facebook.com" in url:
+            url = url.replace("m.facebook.com", "mbasic.facebook.com")
+        print(f"No cookies found. Using mbasic bypass.")
+    else:
+        # If we have cookies, ensure we are on the desktop version if requested
+        if "m.facebook.com" in url:
+            url = url.replace("m.facebook.com", "www.facebook.com")
+        elif "mbasic.facebook.com" in url:
+            url = url.replace("mbasic.facebook.com", "www.facebook.com")
+        print(f"Cookies detected. Using standard Desktop mode.")
         
     print(f"--- Starting Scrape Process for: {url} ---")
     try:
@@ -40,10 +52,13 @@ def scrape_facebook_group(url, count):
                 args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
             )
             
+            # Get User Agent from environment or use default
+            user_agent = os.environ.get('USER_AGENT', "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1")
+            
             # Set up the context
             context_args = {
-                "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
-                "viewport": {'width': 390, 'height': 844},
+                "user_agent": user_agent,
+                "viewport": {'width': 1280, 'height': 800} if "Windows" in user_agent or "Macintosh" in user_agent else {'width': 390, 'height': 844},
                 "locale": "en-US",
                 "timezone_id": "UTC"
             }
