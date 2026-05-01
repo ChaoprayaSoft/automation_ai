@@ -15,94 +15,122 @@ def index():
 
 def scrape_facebook_group(url, count):
     posts = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        )
-        page = context.new_page()
-        stealth(page)
-        
-        print(f"Navigating to Group: {url}")
-        page.goto(url, wait_until="networkidle")
-        page.wait_for_timeout(5000) # Wait for initial load
-
-        # Try to close popups
-        try:
-            close_btn = page.query_selector('div[aria-label="Close"]')
-            if close_btn: close_btn.click()
-        except: pass
-
-        scraped_post_ids = set()
-        
-        while len(posts) < count:
-            # Find all visible post elements
-            # Facebook Groups often use role="article" for posts
-            post_elements = page.query_selector_all('div[role="article"]')
+    print(f"--- Starting Scrape Process for: {url} ---")
+    try:
+        with sync_playwright() as p:
+            print("Launching Browser...")
+            # Added flags for headless environments like Render
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu'
+                ]
+            )
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                viewport={'width': 1280, 'height': 800}
+            )
+            page = context.new_page()
+            stealth(page)
             
-            for element in post_elements:
-                if len(posts) >= count:
-                    break
-                
-                # Use inner_text as a rudimentary ID to avoid duplicates
-                text_snippet = element.inner_text()[:50]
-                if text_snippet in scraped_post_ids:
-                    continue
-                
-                scraped_post_ids.add(text_snippet)
-                
-                # Extract basic post data
-                post_text = ""
-                try:
-                    text_elem = element.query_selector('div[data-ad-preview="message"]')
-                    if text_elem: post_text = text_elem.inner_text()
-                    else: post_text = element.inner_text().split('\n')[0] # Fallback
-                except: pass
+            print(f"Navigating to: {url}")
+            # Use a longer timeout and wait for load instead of networkidle which can hang
+            page.goto(url, wait_until="load", timeout=60000)
+            
+            print("Initial load complete. Waiting 5s for dynamic content...")
+            page.wait_for_timeout(5000)
 
-                # Reactions and Comments count
-                likes = "0"
-                comm_count = "0"
-                try:
-                    likes_elem = element.query_selector('span[aria-label*="Like"], span[aria-label*="reactions"]')
-                    if likes_elem: likes = likes_elem.inner_text().split()[0]
+            # Check if we hit a login wall early
+            if "login" in page.url or page.query_selector('input[name="email"]'):
+                print("!! Hit login wall immediately !!")
+                browser.close()
+                return []
+
+            scraped_post_ids = set()
+            
+            # Limit the number of scroll attempts to prevent infinite loops
+            max_scrolls = 10
+            scroll_count = 0
+            
+            while len(posts) < count and scroll_count < max_scrolls:
+                print(f"Analyzing page (Scroll {scroll_count})...")
+                post_elements = page.query_selector_all('div[role="article"]')
+                print(f"Found {len(post_elements)} potential post elements")
+                
+                for element in post_elements:
+                    if len(posts) >= count:
+                        break
                     
-                    comm_elem = element.query_selector('span[aria-label*="comment"]')
-                    if comm_elem: comm_count = comm_elem.inner_text().split()[0]
-                except: pass
-
-                # Extract visible comments for THIS post
-                comments = []
-                try:
-                    # Look for comment items within this specific post article
-                    comment_items = element.query_selector_all('div[role="article"][aria-label*="Comment"]')
-                    for c_item in comment_items[:10]: # Limit comments per post
+                    try:
+                        # Improved duplicate detection
+                        inner_text = element.inner_text()
+                        if not inner_text: continue
+                        
+                        text_snippet = inner_text[:100]
+                        if text_snippet in scraped_post_ids:
+                            continue
+                        
+                        scraped_post_ids.add(text_snippet)
+                        
+                        # Extract post text
+                        post_text = "No content"
+                        text_elem = element.query_selector('div[data-ad-preview="message"], div[dir="auto"]')
+                        if text_elem:
+                            post_text = text_elem.inner_text()
+                        
+                        # Reactions
+                        likes = "0"
                         try:
-                            author = c_item.query_selector('span[dir="auto"] a, span[dir="auto"] strong').inner_text()
-                            text = c_item.query_selector('div[dir="auto"]').inner_text()
-                            comments.append({"author": author, "text": text})
+                            likes_elem = element.query_selector('span[aria-label*="Like"], span[aria-label*="reactions"]')
+                            if likes_elem:
+                                likes = likes_elem.inner_text()
                         except: pass
-                except: pass
 
-                posts.append({
-                    "text": post_text,
-                    "likes": likes,
-                    "comments_count": comm_count,
-                    "comments": comments
-                })
-                print(f"Scraped post {len(posts)}/{count}")
+                        # Comments
+                        comments = []
+                        try:
+                            # Try to find comment elements
+                            comment_items = element.query_selector_all('div[role="article"][aria-label*="Comment"]')
+                            for c_item in comment_items[:5]:
+                                try:
+                                    author = "User"
+                                    author_elem = c_item.query_selector('span[dir="auto"] a, span[dir="auto"] strong')
+                                    if author_elem: author = author_elem.inner_text()
+                                    
+                                    c_text_elem = c_item.query_selector('div[dir="auto"]')
+                                    c_text = c_text_elem.inner_text() if c_text_elem else ""
+                                    
+                                    if c_text:
+                                        comments.append({"author": author, "text": c_text})
+                                except: pass
+                        except: pass
 
-            if len(posts) < count:
-                # Scroll down to load more
-                page.evaluate("window.scrollBy(0, 1000)")
-                page.wait_for_timeout(2000)
-                
-                # Check if we hit a login wall
-                if "login" in page.url or page.query_selector('input[name="email"]'):
-                    print("Hit login wall. Stopping.")
-                    break
+                        posts.append({
+                            "text": post_text,
+                            "likes": likes,
+                            "comments_count": len(comments),
+                            "comments": comments
+                        })
+                        print(f"Successfully scraped post {len(posts)}")
+                    except Exception as e:
+                        print(f"Error parsing post element: {e}")
+                        continue
 
-        browser.close()
-    return posts
+                if len(posts) < count:
+                    print("Scrolling for more...")
+                    page.evaluate("window.scrollBy(0, 1000)")
+                    page.wait_for_timeout(3000)
+                    scroll_count += 1
+
+            print(f"Scrape finished. Total posts: {len(posts)}")
+            browser.close()
+            return posts
+    except Exception as e:
+        print(f"CRITICAL ERROR during scraping: {str(e)}")
+        raise e
 
 @app.route('/api/status', methods=['GET'])
 def status():
@@ -110,19 +138,28 @@ def status():
 
 @app.route('/api/scrape-group', methods=['POST'])
 def scrape_group():
-    data = request.json
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON data provided"}), 400
+        
     url = data.get('url')
     count = data.get('count', 3)
     
     if not url:
         return jsonify({"error": "URL is required"}), 400
     
+    print(f"Request received for URL: {url}")
     try:
         posts = scrape_facebook_group(url, count)
         return jsonify({"posts": posts})
     except Exception as e:
-        print(f"Scrape Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_msg = f"Backend Error: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        return jsonify({
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
