@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             currentData = data;
-            displayResults(data.posts);
+            displayResults(data);
         } catch (error) {
             console.error('Scrape Error:', error);
             let userMsg = error.message;
@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     demoBtn.addEventListener('click', (e) => {
         e.preventDefault();
         const mockData = {
+            group_name: "Demo AI Enthusiasts Group",
             posts: [
                 {
                     text: "Exploring the future of AI in 2026. What are your thoughts on agentic systems?",
@@ -112,49 +113,63 @@ document.addEventListener('DOMContentLoaded', () => {
             ]
         };
         currentData = mockData;
-        displayResults(mockData.posts);
+        displayResults(mockData);
     });
 
-    function displayResults(posts) {
+    function displayResults(data) {
+        const { posts, group_name } = data;
         resultsSection.classList.remove('hidden');
         
+        // Add Group Header
+        const headerHtml = `
+            <div class="group-header glass" style="padding: 1.5rem; margin-bottom: 2rem; border-left: 4px solid var(--primary);">
+                <div style="font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Source Group</div>
+                <h2 style="font-size: 1.8rem; margin: 0;">${group_name || 'Facebook Group'}</h2>
+            </div>
+        `;
+
         if (!posts || posts.length === 0) {
-            postsContainer.innerHTML = '<p class="status-badge">No posts found in this group.</p>';
+            postsContainer.innerHTML = headerHtml + '<p class="status-badge">No posts found in this group.</p>';
             return;
         }
+
+        postsContainer.innerHTML = headerHtml;
 
         posts.forEach((post, pIndex) => {
             const postCard = document.createElement('div');
             postCard.className = 'post-card glass';
             postCard.style.animationDelay = `${pIndex * 0.1}s`;
             
-            const commentsHtml = post.comments.map(c => `
-                <div class="comment-item">
-                    <div class="comment-author">${c.author}</div>
-                    <div class="comment-text">${c.text}</div>
-                </div>
-            `).join('');
+            const commentsHtml = post.comments && post.comments.length > 0 
+                ? post.comments.map(c => `
+                    <div class="comment-item">
+                        <div class="comment-author">${c.author}</div>
+                        <div class="comment-text">${c.text}</div>
+                    </div>
+                `).join('')
+                : '';
 
             postCard.innerHTML = `
                 <div class="post-content">
                     <div class="comment-author" style="font-size: 1.1rem; margin-bottom: 1rem;">Post #${pIndex + 1}</div>
-                    <p>${post.text || 'No text content'}</p>
+                    <p style="white-space: pre-wrap;">${post.text || 'No text content'}</p>
                 </div>
                 <div class="post-footer">
                     <div class="stats-row" style="display: flex; gap: 2rem;">
-                        <span><strong>${post.likes || 0}</strong> Reactions</span>
-                        <span><strong>${post.comments_count || 0}</strong> Comments</span>
+                        <span><strong style="color: var(--primary)">${post.likes || 0}</strong> Reactions</span>
+                        <span><strong style="color: var(--accent)">${post.comments_count || 0}</strong> Comments</span>
                     </div>
                     <button class="btn-icon export-post" data-index="${pIndex}">
                         <i data-lucide="download"></i>
                     </button>
                 </div>
+                ${commentsHtml ? `
                 <div class="comments-section">
                     <h3 style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--text-dim)">Recent Comments</h3>
                     <div class="comments-list">
-                        ${commentsHtml || '<p class="comment-meta">No comments extracted for this post.</p>'}
+                        ${commentsHtml}
                     </div>
-                </div>
+                </div>` : ''}
             `;
             postsContainer.appendChild(postCard);
         });
