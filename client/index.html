@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FB Insight Scraper | Premium Post & Comment Tool</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+    <div class="bg-glow"></div>
+    
+    <nav class="glass">
+        <div class="nav-content">
+            <div class="logo">
+                <i data-lucide="shield-check" class="icon-primary"></i>
+                <span>FB Insight <span class="text-gradient">Scraper</span></span>
+            </div>
+            <div class="status-badge" id="server-status">
+                <span class="dot"></span> Backend Offline
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <h1>Extract Value from <span class="text-gradient">FB Groups</span></h1>
+            <p>Paste a group URL and select how many recent posts to analyze.</p>
+            
+            <div class="input-container">
+                <div class="input-group glass main-url">
+                    <i data-lucide="link"></i>
+                    <input type="text" id="group-url" placeholder="https://www.facebook.com/groups/..." autocomplete="off">
+                </div>
+                <div class="input-group glass count-input">
+                    <i data-lucide="hash"></i>
+                    <input type="number" id="post-count" value="3" min="1" max="10">
+                </div>
+                <button id="scrape-btn">
+                    <span>Analyze Group</span>
+                    <i data-lucide="arrow-right"></i>
+                </button>
+            </div>
+            <div class="demo-hint">
+                No URL? <a href="#" id="demo-btn">Try Demo Mode</a>
+            </div>
+            <div id="loading" class="hidden">
+                <div class="spinner"></div>
+                <p>Analyzing post content... this may take a moment</p>
+            </div>
+        </section>
+
+        <section id="results" class="hidden">
+            <div class="results-header">
+                <h2>Analysis Results</h2>
+                <button id="export-json-btn" class="btn-primary">
+                    <i data-lucide="file-json"></i>
+                    <span>Download All (JSON)</span>
+                </button>
+            </div>
+            <div id="posts-container" class="posts-feed">
+                <!-- Posts will be injected here as individual cards -->
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 FB Insight Scraper. For educational purposes only.</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
